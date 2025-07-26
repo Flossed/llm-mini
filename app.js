@@ -68,6 +68,10 @@ async function initializeModel(size = 'small') {
         // Update tokenizer with matching vocab size
         tokenizer = new SimpleTokenizer(config.vocabSize);
         
+        // Export to window for trainer
+        window.model = model;
+        window.tokenizer = tokenizer;
+        
         // Update UI
         document.getElementById('model-status').innerHTML = 
             `<strong>Model:</strong> ${size} (${config.numLayers} layers, ${config.hiddenSize} hidden size)`;
@@ -271,5 +275,3 @@ async function runBenchmark() {
 
 // Export for debugging
 window.runBenchmark = runBenchmark;
-window.model = () => model;
-window.tokenizer = () => tokenizer;
