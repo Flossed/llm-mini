@@ -109,6 +109,14 @@ async function generateResponse() {
         // Tokenize input
         const inputTokens = tokenizer.encode(userInput, true);
         console.log('Input tokens:', inputTokens);
+        console.log('Tokenizer vocab size:', tokenizer.getVocabSize());
+        console.log('Model vocab size:', model.config.vocabSize);
+        
+        // Check if tokens are within vocab range
+        const outOfRangeTokens = inputTokens.filter(t => t >= model.config.vocabSize);
+        if (outOfRangeTokens.length > 0) {
+            console.warn('Tokens out of model vocab range:', outOfRangeTokens);
+        }
         
         // Get generation parameters
         const temperature = parseFloat(document.getElementById('temperature').value);

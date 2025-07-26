@@ -315,7 +315,7 @@ class MiniLLM {
     
     async initializeWeights() {
         // Initialize with small random weights
-        // In a real implementation, you would load pretrained weights
+        // For demonstration, we'll use a better initialization strategy
         const layers = this.model.layers;
         
         for (const layer of layers) {
@@ -325,16 +325,23 @@ class MiniLLM {
                     const shape = w.shape;
                     const fanIn = shape[0];
                     const fanOut = shape[shape.length - 1];
+                    
+                    // Use Xavier/Glorot initialization for better convergence
                     const scale = Math.sqrt(2.0 / (fanIn + fanOut));
                     
-                    return tf.randomNormal(shape, 0, scale);
+                    // For embeddings and output layer, use smaller initialization
+                    if (layer.name.includes('embedding') || layer.name.includes('output_projection')) {
+                        return tf.randomUniform(shape, -0.1, 0.1);
+                    }
+                    
+                    return tf.randomNormal(shape, 0, scale * 0.5); // Smaller scale for stability
                 });
                 
                 layer.setWeights(newWeights);
             }
         }
         
-        console.log('Model weights initialized');
+        console.log('Model weights initialized with improved strategy');
     }
     
     async warmupGPU() {
@@ -392,6 +399,10 @@ class MiniLLM {
                 [1, 1, this.config.vocabSize]
             );
             
+            // Debug: Check logits range
+            const logitsData = await lastLogits.data();
+            console.log(`Step ${i}: Logits min=${Math.min(...logitsData)}, max=${Math.max(...logitsData)}`);
+            
             // Apply temperature
             const scaledLogits = tf.div(lastLogits, tf.scalar(temperature));
             
@@ -406,6 +417,8 @@ class MiniLLM {
             const nextToken = doSample 
                 ? await this.sampleFromDistribution(probs)
                 : await this.greedyDecode(probs);
+            
+            console.log(`Generated token: ${nextToken} (vocab size: ${this.config.vocabSize})`);
             
             generatedTokens.push(nextToken);
             totalTokens++;
