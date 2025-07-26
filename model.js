@@ -230,7 +230,7 @@ class MiniLLM {
             }
             
             computeOutputShape(inputShape) {
-                return inputShape;
+                return [inputShape[0], inputShape[1], this.hiddenSize];
             }
             
             call(inputs, kwargs) {
@@ -284,7 +284,16 @@ class MiniLLM {
         }
         
         const attentionLayer = new MultiHeadAttentionLayer({ name: `block_${blockIndex}_attention` });
-        return attentionLayer.apply(qkv);
+        const attentionOutput = attentionLayer.apply(qkv);
+        
+        // Output projection to match residual connection dimensions
+        const outputProjection = tf.layers.dense({
+            units: this.config.hiddenSize,
+            useBias: false,
+            name: `block_${blockIndex}_attn_output`
+        });
+        
+        return outputProjection.apply(attentionOutput);
     }
     
     getCausalMask(seqLength) {
