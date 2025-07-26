@@ -445,7 +445,9 @@ class MiniLLM {
     }
     
     async topKFiltering(logits, k) {
-        const [topKValues, topKIndices] = tf.topk(logits, k);
+        const topKResult = tf.topk(logits, k);
+        const topKValues = topKResult.values;
+        const topKIndices = topKResult.indices;
         
         // Create a mask for top-k values
         const minValue = tf.min(topKValues);
