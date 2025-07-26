@@ -100,34 +100,60 @@ class MiniLLM {
     }
     
     addPositionalEncoding(x) {
-        return tf.layers.lambda({
-            f: (tensor) => {
-                const [batchSize, seqLength, hiddenSize] = tensor.shape;
-                
-                // Create positional encoding
-                const positionIndices = tf.range(0, seqLength, 1, 'float32');
-                const dimensionIndices = tf.range(0, hiddenSize, 1, 'float32');
-                
-                const rates = tf.div(
-                    dimensionIndices,
-                    tf.scalar(hiddenSize)
-                ).mul(tf.scalar(-Math.log(10000.0)));
-                
-                const angleRates = tf.exp(rates);
-                const angleRads = tf.outerProduct(positionIndices, angleRates);
-                
-                // Apply sin to even indices, cos to odd indices
-                const sines = tf.sin(angleRads);
-                const cosines = tf.cos(angleRads);
-                
-                const posEncoding = tf.stack([sines, cosines], -1);
-                const posEncodingFinal = tf.reshape(posEncoding, [seqLength, hiddenSize]);
-                
-                // Add to input
-                return tf.add(tensor, posEncodingFinal);
-            },
-            name: 'positional_encoding'
-        }).apply(x);
+        // Create a custom layer instead of using Lambda which is not available in browser
+        class PositionalEncodingLayer extends tf.layers.Layer {
+            constructor(config) {
+                super(config);
+            }
+            
+            computeOutputShape(inputShape) {
+                return inputShape;
+            }
+            
+            call(inputs, kwargs) {
+                return tf.tidy(() => {
+                    const input = inputs[0];
+                    const inputShape = input.shape;
+                    const batchSize = inputShape[0];
+                    const seqLength = inputShape[1];
+                    const hiddenSize = inputShape[2];
+                    
+                    // Create positional encoding
+                    const positionIndices = tf.range(0, seqLength, 1, 'float32');
+                    const dimensionIndices = tf.range(0, hiddenSize, 1, 'float32');
+                    
+                    const rates = tf.div(
+                        dimensionIndices,
+                        tf.scalar(hiddenSize)
+                    ).mul(tf.scalar(-Math.log(10000.0)));
+                    
+                    const angleRates = tf.exp(rates);
+                    const angleRads = tf.outerProduct(positionIndices, angleRates);
+                    
+                    // Apply sin to even indices, cos to odd indices
+                    const sines = tf.sin(angleRads);
+                    const cosines = tf.cos(angleRads);
+                    
+                    // Interleave sines and cosines
+                    const posEncoding = tf.stack([sines, cosines], -1);
+                    const posEncodingFinal = tf.reshape(posEncoding, [seqLength, hiddenSize]);
+                    
+                    // Expand for batch dimension
+                    const posEncodingBatch = tf.expandDims(posEncodingFinal, 0);
+                    const posEncodingExpanded = tf.tile(posEncodingBatch, [batchSize, 1, 1]);
+                    
+                    // Add to input
+                    return tf.add(input, posEncodingExpanded);
+                });
+            }
+            
+            static get className() {
+                return 'PositionalEncodingLayer';
+            }
+        }
+        
+        const posEncodingLayer = new PositionalEncodingLayer({ name: 'positional_encoding' });
+        return posEncodingLayer.apply(x);
     }
     
     async transformerBlock(x, blockIndex) {
@@ -190,47 +216,75 @@ class MiniLLM {
         
         const qkv = qkvProjection.apply(x);
         
-        // Split and reshape for multi-head attention
-        return tf.layers.lambda({
-            f: (tensor) => {
-                const [batchSize, seqLength, _] = tensor.shape;
-                
-                // Split QKV
-                const qkvSplit = tf.split(tensor, 3, -1);
-                let [q, k, v] = qkvSplit;
-                
-                // Reshape for multi-head attention
-                const reshapeHeads = (t) => {
-                    t = tf.reshape(t, [batchSize, seqLength, this.config.numHeads, headDim]);
-                    return tf.transpose(t, [0, 2, 1, 3]);
-                };
-                
-                q = reshapeHeads(q);
-                k = reshapeHeads(k);
-                v = reshapeHeads(v);
-                
-                // Scaled dot-product attention
-                let scores = tf.matMul(q, k, false, true);
-                scores = tf.div(scores, tf.scalar(Math.sqrt(headDim)));
-                
-                // Apply causal mask
-                const mask = this.getCausalMask(seqLength);
-                scores = tf.add(scores, tf.mul(mask, tf.scalar(-1e9)));
-                
-                // Softmax
-                const attentionWeights = tf.softmax(scores, -1);
-                
-                // Apply attention to values
-                let output = tf.matMul(attentionWeights, v);
-                
-                // Reshape back
-                output = tf.transpose(output, [0, 2, 1, 3]);
-                output = tf.reshape(output, [batchSize, seqLength, this.config.hiddenSize]);
-                
-                return output;
-            },
-            name: `block_${blockIndex}_attention`
-        }).apply(qkv);
+        // Create custom attention layer
+        const blockIndex_ = blockIndex;
+        const config = this.config;
+        const getCausalMask = this.getCausalMask.bind(this);
+        
+        class MultiHeadAttentionLayer extends tf.layers.Layer {
+            constructor(layerConfig) {
+                super(layerConfig);
+                this.headDim = headDim;
+                this.numHeads = config.numHeads;
+                this.hiddenSize = config.hiddenSize;
+            }
+            
+            computeOutputShape(inputShape) {
+                return inputShape;
+            }
+            
+            call(inputs, kwargs) {
+                return tf.tidy(() => {
+                    const input = inputs[0];
+                    const inputShape = input.shape;
+                    const batchSize = inputShape[0];
+                    const seqLength = inputShape[1];
+                    
+                    // Split QKV
+                    const qkvSplit = tf.split(input, 3, -1);
+                    let [q, k, v] = qkvSplit;
+                    
+                    // Reshape for multi-head attention
+                    const reshapeHeads = (t) => {
+                        t = tf.reshape(t, [batchSize, seqLength, this.numHeads, this.headDim]);
+                        return tf.transpose(t, [0, 2, 1, 3]);
+                    };
+                    
+                    q = reshapeHeads(q);
+                    k = reshapeHeads(k);
+                    v = reshapeHeads(v);
+                    
+                    // Scaled dot-product attention
+                    let scores = tf.matMul(q, k, false, true);
+                    scores = tf.div(scores, tf.scalar(Math.sqrt(this.headDim)));
+                    
+                    // Apply causal mask
+                    const mask = getCausalMask(seqLength);
+                    const expandedMask = tf.expandDims(tf.expandDims(mask, 0), 0);
+                    const tiledMask = tf.tile(expandedMask, [batchSize, this.numHeads, 1, 1]);
+                    scores = tf.add(scores, tf.mul(tiledMask, tf.scalar(-1e9)));
+                    
+                    // Softmax
+                    const attentionWeights = tf.softmax(scores, -1);
+                    
+                    // Apply attention to values
+                    let output = tf.matMul(attentionWeights, v);
+                    
+                    // Reshape back
+                    output = tf.transpose(output, [0, 2, 1, 3]);
+                    output = tf.reshape(output, [batchSize, seqLength, this.hiddenSize]);
+                    
+                    return output;
+                });
+            }
+            
+            static get className() {
+                return 'MultiHeadAttentionLayer';
+            }
+        }
+        
+        const attentionLayer = new MultiHeadAttentionLayer({ name: `block_${blockIndex}_attention` });
+        return attentionLayer.apply(qkv);
     }
     
     getCausalMask(seqLength) {
