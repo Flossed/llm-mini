@@ -122,21 +122,27 @@ class MiniLLM {
                     const positionIndices = tf.range(0, seqLength, 1, 'float32');
                     const dimensionIndices = tf.range(0, hiddenSize, 1, 'float32');
                     
-                    const rates = tf.div(
-                        dimensionIndices,
-                        tf.scalar(hiddenSize)
-                    ).mul(tf.scalar(-Math.log(10000.0)));
+                    // Create position encodings with sin/cos
+                    const angleRates = tf.pow(
+                        tf.scalar(10000),
+                        tf.div(dimensionIndices, tf.scalar(hiddenSize))
+                    );
                     
-                    const angleRates = tf.exp(rates);
-                    const angleRads = tf.outerProduct(positionIndices, angleRates);
+                    // Create position * angle_rates matrix
+                    const positionAngleMatrix = tf.outerProduct(positionIndices, tf.div(tf.scalar(1), angleRates));
                     
                     // Apply sin to even indices, cos to odd indices
-                    const sines = tf.sin(angleRads);
-                    const cosines = tf.cos(angleRads);
+                    const evenMask = tf.equal(tf.mod(dimensionIndices, tf.scalar(2)), tf.scalar(0));
+                    const oddMask = tf.equal(tf.mod(dimensionIndices, tf.scalar(2)), tf.scalar(1));
                     
-                    // Interleave sines and cosines
-                    const posEncoding = tf.stack([sines, cosines], -1);
-                    const posEncodingFinal = tf.reshape(posEncoding, [seqLength, hiddenSize]);
+                    const sines = tf.sin(positionAngleMatrix);
+                    const cosines = tf.cos(positionAngleMatrix);
+                    
+                    // Combine sines for even positions and cosines for odd positions
+                    const posEncodingFinal = tf.add(
+                        tf.mul(sines, tf.cast(evenMask, 'float32')),
+                        tf.mul(cosines, tf.cast(oddMask, 'float32'))
+                    );
                     
                     // Expand for batch dimension
                     const posEncodingBatch = tf.expandDims(posEncodingFinal, 0);
