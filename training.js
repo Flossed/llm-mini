@@ -227,7 +227,7 @@ function addTrainingUI() {
         </div>
     `;
     
-    document.getElementById('model-info').insertAdjacentHTML('afterend', trainingHTML);
+    document.querySelector('.container').insertAdjacentHTML('beforeend', trainingHTML);
 }
 
 // Training control functions
