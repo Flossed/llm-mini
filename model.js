@@ -183,17 +183,37 @@ class MiniLLM {
         
         // FFN with GPU-optimized dimensions
         // Implement GELU activation manually as it's not built-in
-        const ffn1 = tf.layers.dense({
+        x = tf.layers.dense({
             units: this.config.hiddenSize * 4,
             activation: 'linear',  // No activation here, we'll apply GELU manually
             name: `block_${blockIndex}_ffn1`
-        });
+        }).apply(x);
         
-        x = ffn1.apply(x);
+        // Apply GELU activation using a custom layer
+        class GeluLayer extends tf.layers.Layer {
+            constructor(config) {
+                super(config);
+            }
+            
+            computeOutputShape(inputShape) {
+                return inputShape;
+            }
+            
+            call(inputs, kwargs) {
+                return tf.tidy(() => {
+                    const x = inputs[0];
+                    // GELU approximation: x * sigmoid(1.702 * x)
+                    return tf.mul(x, tf.sigmoid(tf.mul(x, tf.scalar(1.702))));
+                });
+            }
+            
+            static get className() {
+                return 'GeluLayer';
+            }
+        }
         
-        // Apply GELU activation: x * 0.5 * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
-        // Approximation: x * sigmoid(1.702 * x)
-        x = tf.mul(x, tf.sigmoid(tf.mul(x, tf.scalar(1.702))));
+        const geluLayer = new GeluLayer({ name: `block_${blockIndex}_gelu` });
+        x = geluLayer.apply(x);
         
         x = tf.layers.dense({
             units: this.config.hiddenSize,
