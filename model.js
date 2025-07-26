@@ -50,7 +50,7 @@ class MiniLLM {
     
     async buildModel() {
         const inputs = tf.input({
-            shape: [null, this.config.maxSeqLength],
+            shape: [this.config.maxSeqLength],  // Changed from [null, this.config.maxSeqLength]
             dtype: 'int32',
             name: 'input_ids'
         });
@@ -369,7 +369,7 @@ class MiniLLM {
         console.log('Warming up GPU...');
         
         // Run a few inference passes to warm up the GPU
-        const dummyInput = tf.zeros([1, 32], 'int32');
+        const dummyInput = tf.zeros([1, this.config.maxSeqLength], 'int32');
         
         for (let i = 0; i < 3; i++) {
             const start = performance.now();
