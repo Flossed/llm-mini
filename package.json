@@ -1,0 +1,37 @@
+{
+  "name": "llm-mini",
+  "version": "1.0.0",
+  "description": "GPU-optimized mini transformer language model using TensorFlow.js for AMD RX 7900 XTX",
+  "main": "app.js",
+  "scripts": {
+    "start": "npx http-server -p 8080 -o",
+    "serve": "npx http-server -p 8080",
+    "dev": "npx http-server -p 8080 -c-1"
+  },
+  "keywords": [
+    "llm",
+    "transformer",
+    "tensorflow.js",
+    "webgl",
+    "gpu",
+    "language-model",
+    "mini-llm",
+    "amd",
+    "rx-7900-xtx"
+  ],
+  "author": "Claude AI Assistant",
+  "license": "MIT",
+  "dependencies": {
+    "@tensorflow/tfjs": "^4.17.0"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "file:///E:/_Applications/___Claude/llm-mini"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

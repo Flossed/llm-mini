@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini LLM - API Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #ff6b6b;
+            text-align: center;
+        }
+        
+        .code-block {
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            overflow-x: auto;
+            border-left: 4px solid #ff6b6b;
+        }
+        
+        code {
+            color: #e0e0e0;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        
+        .output {
+            background-color: #3a3a3a;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        
+        button {
+            padding: 10px 20px;
+            background-color: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background-color: #ff5252;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mini LLM - API Examples</h1>
+        
+        <h2>1. Basic Text Generation</h2>
+        <div class="code-block">
+            <code>
+// Initialize model and tokenizer
+const model = new MiniLLM(MODEL_CONFIGS.small);
+await model.initialize();
+
+const tokenizer = new SimpleTokenizer(MODEL_CONFIGS.small.vocabSize);
+
+// Generate text
+const prompt = "The future of AI is";
+const inputTokens = tokenizer.encode(prompt);
+
+const result = await model.generate(inputTokens, {
+    maxLength: 50,
+    temperature: 0.8,
+    topK: 40
+});
+
+const generatedText = tokenizer.decode(result.tokens);
+console.log(generatedText);
+            </code>
+        </div>
+        <button onclick="runExample1()">Run Example</button>
+        <div id="output1" class="output"></div>
+        
+        <h2>2. Batch Processing</h2>
+        <div class="code-block">
+            <code>
+// Process multiple prompts efficiently
+const prompts = [
+    "Technology will",
+    "The best way to",
+    "In the future, we"
+];
+
+const batchTokens = prompts.map(p => tokenizer.encode(p));
+
+// Process each prompt
+for (let i = 0; i < prompts.length; i++) {
+    const result = await model.generate(batchTokens[i], {
+        maxLength: 30,
+        temperature: 0.7
+    });
+    
+    console.log(`Prompt ${i + 1}: ${prompts[i]}`);
+    console.log(`Response: ${tokenizer.decode(result.tokens)}`);
+    console.log(`Speed: ${result.tokensPerSecond.toFixed(1)} tokens/sec\n`);
+}
+            </code>
+        </div>
+        <button onclick="runExample2()">Run Example</button>
+        <div id="output2" class="output"></div>
+        
+        <h2>3. Performance Monitoring</h2>
+        <div class="code-block">
+            <code>
+// Monitor GPU memory and performance
+const memBefore = tf.memory();
+
+// Generate with monitoring
+const start = performance.now();
+const result = await model.generate(inputTokens, {
+    maxLength: 100
+});
+const end = performance.now();
+
+const memAfter = tf.memory();
+
+console.log('Performance Metrics:');
+console.log(`- Generation time: ${(end - start).toFixed(2)}ms`);
+console.log(`- Tokens generated: ${result.tokens.length}`);
+console.log(`- Tokens/second: ${result.tokensPerSecond.toFixed(1)}`);
+console.log(`- Memory used: ${((memAfter.numBytes - memBefore.numBytes) / 1024 / 1024).toFixed(2)}MB`);
+console.log(`- Active tensors: ${memAfter.numTensors}`);
+            </code>
+        </div>
+        <button onclick="runExample3()">Run Example</button>
+        <div id="output3" class="output"></div>
+        
+        <h2>4. Custom Generation Parameters</h2>
+        <div class="code-block">
+            <code>
+// Experiment with different generation strategies
+
+// Conservative generation (low temperature)
+const conservative = await model.generate(inputTokens, {
+    maxLength: 50,
+    temperature: 0.3,
+    topK: 10,
+    doSample: true
+});
+
+// Creative generation (high temperature)
+const creative = await model.generate(inputTokens, {
+    maxLength: 50,
+    temperature: 1.5,
+    topK: 100,
+    doSample: true
+});
+
+// Deterministic generation (greedy)
+const deterministic = await model.generate(inputTokens, {
+    maxLength: 50,
+    temperature: 1.0,
+    doSample: false  // Uses greedy decoding
+});
+            </code>
+        </div>
+        <button onclick="runExample4()">Run Example</button>
+        <div id="output4" class="output"></div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+    <script src="model.js"></script>
+    <script src="tokenizer.js"></script>
+    <script>
+        let model = null;
+        let tokenizer = null;
+        
+        async function initializeIfNeeded() {
+            if (!model) {
+                // Initialize TensorFlow.js
+                await tf.setBackend('webgl');
+                
+                // Initialize model
+                model = new MiniLLM(MODEL_CONFIGS.tiny); // Use tiny for faster demos
+                await model.initialize();
+                
+                // Initialize tokenizer
+                tokenizer = new SimpleTokenizer(MODEL_CONFIGS.tiny.vocabSize);
+            }
+        }
+        
+        async function runExample1() {
+            const output = document.getElementById('output1');
+            output.textContent = 'Initializing model...';
+            
+            try {
+                await initializeIfNeeded();
+                
+                output.textContent = 'Generating text...';
+                
+                const prompt = "The future of AI is";
+                const inputTokens = tokenizer.encode(prompt);
+                
+                const result = await model.generate(inputTokens, {
+                    maxLength: 50,
+                    temperature: 0.8,
+                    topK: 40
+                });
+                
+                const generatedText = tokenizer.decode(result.tokens);
+                
+                output.textContent = `Prompt: "${prompt}"\n`;
+                output.textContent += `Generated: "${generatedText}"\n`;
+                output.textContent += `Speed: ${result.tokensPerSecond.toFixed(1)} tokens/sec`;
+                
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function runExample2() {
+            const output = document.getElementById('output2');
+            output.textContent = 'Initializing model...';
+            
+            try {
+                await initializeIfNeeded();
+                
+                output.textContent = 'Processing batch...\n';
+                
+                const prompts = [
+                    "Technology will",
+                    "The best way to",
+                    "In the future, we"
+                ];
+                
+                const batchTokens = prompts.map(p => tokenizer.encode(p));
+                
+                for (let i = 0; i < prompts.length; i++) {
+                    const result = await model.generate(batchTokens[i], {
+                        maxLength: 30,
+                        temperature: 0.7
+                    });
+                    
+                    output.textContent += `\nPrompt ${i + 1}: "${prompts[i]}"\n`;
+                    output.textContent += `Response: "${tokenizer.decode(result.tokens)}"\n`;
+                    output.textContent += `Speed: ${result.tokensPerSecond.toFixed(1)} tokens/sec\n`;
+                }
+                
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function runExample3() {
+            const output = document.getElementById('output3');
+            output.textContent = 'Initializing model...';
+            
+            try {
+                await initializeIfNeeded();
+                
+                const prompt = "AI and machine learning";
+                const inputTokens = tokenizer.encode(prompt);
+                
+                const memBefore = tf.memory();
+                
+                output.textContent = 'Generating with performance monitoring...';
+                
+                const start = performance.now();
+                const result = await model.generate(inputTokens, {
+                    maxLength: 100
+                });
+                const end = performance.now();
+                
+                const memAfter = tf.memory();
+                
+                output.textContent = 'Performance Metrics:\n';
+                output.textContent += `- Generation time: ${(end - start).toFixed(2)}ms\n`;
+                output.textContent += `- Tokens generated: ${result.tokens.length}\n`;
+                output.textContent += `- Tokens/second: ${result.tokensPerSecond.toFixed(1)}\n`;
+                output.textContent += `- Memory used: ${((memAfter.numBytes - memBefore.numBytes) / 1024 / 1024).toFixed(2)}MB\n`;
+                output.textContent += `- Active tensors: ${memAfter.numTensors}\n`;
+                output.textContent += `- Total GPU memory: ${(memAfter.numBytes / 1024 / 1024).toFixed(2)}MB`;
+                
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function runExample4() {
+            const output = document.getElementById('output4');
+            output.textContent = 'Initializing model...';
+            
+            try {
+                await initializeIfNeeded();
+                
+                const prompt = "The meaning of life is";
+                const inputTokens = tokenizer.encode(prompt);
+                
+                output.textContent = `Prompt: "${prompt}"\n\n`;
+                
+                // Conservative generation
+                output.textContent += 'Conservative (temp=0.3):\n';
+                const conservative = await model.generate(inputTokens, {
+                    maxLength: 50,
+                    temperature: 0.3,
+                    topK: 10,
+                    doSample: true
+                });
+                output.textContent += `"${tokenizer.decode(conservative.tokens)}"\n\n`;
+                
+                // Creative generation
+                output.textContent += 'Creative (temp=1.5):\n';
+                const creative = await model.generate(inputTokens, {
+                    maxLength: 50,
+                    temperature: 1.5,
+                    topK: 100,
+                    doSample: true
+                });
+                output.textContent += `"${tokenizer.decode(creative.tokens)}"\n\n`;
+                
+                // Deterministic generation
+                output.textContent += 'Deterministic (greedy):\n';
+                const deterministic = await model.generate(inputTokens, {
+                    maxLength: 50,
+                    temperature: 1.0,
+                    doSample: false
+                });
+                output.textContent += `"${tokenizer.decode(deterministic.tokens)}"`;
+                
+            } catch (error) {
+                output.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
