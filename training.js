@@ -56,23 +56,24 @@ class MiniLLMTrainer {
     }
     
     async trainBatch(batch, sequenceLength) {
-        const loss = await tf.tidy(() => {
-            // Prepare batch tensors
-            const batchInputs = [];
-            const batchTargets = [];
+        // Prepare batch tensors
+        const batchInputs = [];
+        const batchTargets = [];
+        
+        for (const seq of batch) {
+            // Pad sequences if necessary
+            const paddedInput = this.padSequence(seq.input, this.model.config.maxSeqLength);
+            const paddedTarget = this.padSequence(seq.target, this.model.config.maxSeqLength);
             
-            for (const seq of batch) {
-                // Pad sequences if necessary
-                const paddedInput = this.padSequence(seq.input, this.model.config.maxSeqLength);
-                const paddedTarget = this.padSequence(seq.target, this.model.config.maxSeqLength);
-                
-                batchInputs.push(paddedInput);
-                batchTargets.push(paddedTarget);
-            }
-            
-            const inputs = tf.tensor2d(batchInputs, [batch.length, this.model.config.maxSeqLength], 'int32');
-            const targets = tf.tensor2d(batchTargets, [batch.length, this.model.config.maxSeqLength], 'int32');
-            
+            batchInputs.push(paddedInput);
+            batchTargets.push(paddedTarget);
+        }
+        
+        const inputs = tf.tensor2d(batchInputs, [batch.length, this.model.config.maxSeqLength], 'int32');
+        const targets = tf.tensor2d(batchTargets, [batch.length, this.model.config.maxSeqLength], 'int32');
+        
+        // Compute loss and update weights
+        const lossValue = await this.optimizer.minimize(() => {
             // Forward pass
             const predictions = this.model.model.predict(inputs);
             
@@ -87,15 +88,13 @@ class MiniLLMTrainer {
             const loss = tf.losses.softmaxCrossEntropy(targFlat, predFlat);
             
             return loss;
-        });
+        }, true); // true = return the scalar loss value
         
-        // Compute gradients and update weights
-        await this.optimizer.minimize(() => loss);
+        // Clean up tensors
+        inputs.dispose();
+        targets.dispose();
         
-        const lossValue = await loss.data();
-        loss.dispose();
-        
-        return lossValue[0];
+        return lossValue.dataSync()[0];
     }
     
     padSequence(sequence, maxLength) {
