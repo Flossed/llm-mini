@@ -101,9 +101,46 @@ class MiniLLM {
     
     addPositionalEncoding(x) {
         // Create a custom layer instead of using Lambda which is not available in browser
+        const config = this.config;
+        
         class PositionalEncodingLayer extends tf.layers.Layer {
-            constructor(config) {
-                super(config);
+            constructor(layerConfig) {
+                super(layerConfig);
+                this.seqLength = config.maxSeqLength;
+                this.hiddenSize = config.hiddenSize;
+            }
+            
+            build(inputShape) {
+                // Create positional encoding as a trainable weight
+                // This avoids tensor operations during build
+                const posEncoding = this.addWeight(
+                    'positional_encoding',
+                    [this.seqLength, this.hiddenSize],
+                    'float32',
+                    tf.initializers.zeros()
+                );
+                
+                // Initialize with sin/cos values
+                const positionIndices = [];
+                const dimensionIndices = [];
+                
+                for (let pos = 0; pos < this.seqLength; pos++) {
+                    for (let dim = 0; dim < this.hiddenSize; dim++) {
+                        const angle = pos / Math.pow(10000, (2 * Math.floor(dim / 2)) / this.hiddenSize);
+                        if (dim % 2 === 0) {
+                            positionIndices.push(Math.sin(angle));
+                        } else {
+                            positionIndices.push(Math.cos(angle));
+                        }
+                    }
+                }
+                
+                // Set the weight values
+                const posEncodingValues = tf.tensor2d(positionIndices, [this.seqLength, this.hiddenSize]);
+                posEncoding.write(posEncodingValues);
+                posEncodingValues.dispose();
+                
+                super.build(inputShape);
             }
             
             computeOutputShape(inputShape) {
@@ -112,44 +149,14 @@ class MiniLLM {
             
             call(inputs, kwargs) {
                 return tf.tidy(() => {
-                    const input = inputs[0];
-                    const inputShape = input.shape;
-                    const batchSize = inputShape[0];
-                    const seqLength = inputShape[1];
-                    const hiddenSize = inputShape[2];
+                    const input = Array.isArray(inputs) ? inputs[0] : inputs;
                     
-                    // Create positional encoding
-                    const positionIndices = tf.range(0, seqLength, 1, 'float32');
-                    const dimensionIndices = tf.range(0, hiddenSize, 1, 'float32');
+                    // Get the positional encoding weight
+                    const posEncoding = this.getWeights()[0];
                     
-                    // Create position encodings with sin/cos
-                    const angleRates = tf.pow(
-                        tf.scalar(10000),
-                        tf.div(dimensionIndices, tf.scalar(hiddenSize))
-                    );
-                    
-                    // Create position * angle_rates matrix
-                    const positionAngleMatrix = tf.outerProduct(positionIndices, tf.div(tf.scalar(1), angleRates));
-                    
-                    // Apply sin to even indices, cos to odd indices
-                    const evenMask = tf.equal(tf.mod(dimensionIndices, tf.scalar(2)), tf.scalar(0));
-                    const oddMask = tf.equal(tf.mod(dimensionIndices, tf.scalar(2)), tf.scalar(1));
-                    
-                    const sines = tf.sin(positionAngleMatrix);
-                    const cosines = tf.cos(positionAngleMatrix);
-                    
-                    // Combine sines for even positions and cosines for odd positions
-                    const posEncodingFinal = tf.add(
-                        tf.mul(sines, tf.cast(evenMask, 'float32')),
-                        tf.mul(cosines, tf.cast(oddMask, 'float32'))
-                    );
-                    
-                    // Expand for batch dimension
-                    const posEncodingBatch = tf.expandDims(posEncodingFinal, 0);
-                    const posEncodingExpanded = tf.tile(posEncodingBatch, [batchSize, 1, 1]);
-                    
-                    // Add to input
-                    return tf.add(input, posEncodingExpanded);
+                    // Add positional encoding to each item in the batch
+                    // Use broadcasting - TensorFlow.js will automatically expand dimensions
+                    return tf.add(input, posEncoding);
                 });
             }
             
@@ -293,8 +300,9 @@ class MiniLLM {
                     
                     // Apply causal mask
                     const mask = getCausalMask(seqLength);
-                    const expandedMask = tf.expandDims(tf.expandDims(mask, 0), 0);
-                    const tiledMask = tf.tile(expandedMask, [batchSize, this.numHeads, 1, 1]);
+                    // Instead of expandDims, reshape and tile
+                    const reshapedMask = tf.reshape(mask, [1, 1, seqLength, seqLength]);
+                    const tiledMask = tf.tile(reshapedMask, [batchSize, this.numHeads, 1, 1]);
                     scores = tf.add(scores, tf.mul(tiledMask, tf.scalar(-1e9)));
                     
                     // Softmax
