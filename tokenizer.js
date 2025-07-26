@@ -27,8 +27,9 @@ class SimpleTokenizer {
             index = Math.max(index, id + 1);
         }
         
+        // Limit vocabulary building to stay within vocabSize
         // Add ASCII printable characters
-        for (let i = 32; i < 127; i++) {
+        for (let i = 32; i < 127 && index < this.vocabSize; i++) {
             const char = String.fromCharCode(i);
             if (!this.vocab.has(char)) {
                 this.vocab.set(char, index);
@@ -48,35 +49,20 @@ class SimpleTokenizer {
             'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other',
             'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think', 'also',
             'back', 'after', 'use', 'two', 'how', 'our', 'work', 'first', 'well', 'way',
-            'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us',
-            'is', 'was', 'are', 'been', 'has', 'had', 'were', 'said', 'did', 'getting',
-            'made', 'find', 'where', 'much', 'too', 'very', 'still', 'being', 'going', 'why',
-            'before', 'never', 'here', 'more', 'always', 'those', 'tell', 'really', 'something', 'put',
-            'thing', 'long', 'take', 'see', 'make', 'many', 'over', 'such', 'great', 'think',
-            'say', 'help', 'low', 'line', 'differ', 'turn', 'cause', 'same', 'mean', 'part',
-            'start', 'seem', 'next', 'sound', 'take', 'only', 'little', 'round', 'man', 'year',
-            'came', 'show', 'every', 'good', 'me', 'give', 'our', 'under', 'name', 'very',
-            'through', 'just', 'form', 'sentence', 'great', 'think', 'say', 'help', 'low', 'line'
+            'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us'
         ];
         
-        // Add common word variations
+        // Add common words and their variations
         for (const word of commonWords) {
             if (index >= this.vocabSize) break;
             
             // Lowercase
-            if (!this.vocab.has(word)) {
+            if (!this.vocab.has(word) && index < this.vocabSize) {
                 this.vocab.set(word, index++);
                 this.reverseVocab.set(index - 1, word);
             }
             
-            // Uppercase
-            const upperWord = word.toUpperCase();
-            if (!this.vocab.has(upperWord) && index < this.vocabSize) {
-                this.vocab.set(upperWord, index++);
-                this.reverseVocab.set(index - 1, upperWord);
-            }
-            
-            // Capitalized
+            // Uppercase first letter
             const capitalizedWord = word.charAt(0).toUpperCase() + word.slice(1);
             if (!this.vocab.has(capitalizedWord) && index < this.vocabSize) {
                 this.vocab.set(capitalizedWord, index++);
@@ -84,25 +70,7 @@ class SimpleTokenizer {
             }
         }
         
-        // Add common punctuation combinations
-        const punctuations = ['.', ',', '!', '?', ';', ':', '"', "'", '-', '(', ')', '[', ']', '{', '}'];
-        for (const punct of punctuations) {
-            if (!this.vocab.has(punct) && index < this.vocabSize) {
-                this.vocab.set(punct, index++);
-                this.reverseVocab.set(index - 1, punct);
-            }
-        }
-        
-        // Fill remaining vocabulary with number combinations
-        for (let i = 0; i < 1000 && index < this.vocabSize; i++) {
-            const numStr = i.toString();
-            if (!this.vocab.has(numStr)) {
-                this.vocab.set(numStr, index++);
-                this.reverseVocab.set(index - 1, numStr);
-            }
-        }
-        
-        console.log(`Tokenizer initialized with ${this.vocab.size} tokens`);
+        console.log(`Tokenizer initialized with ${this.vocab.size} tokens (max: ${this.vocabSize})`);
     }
     
     encode(text, addSpecialTokens = true) {
