@@ -244,7 +244,7 @@ async function startTraining() {
     const epochs = parseInt(document.getElementById('epochs').value);
     const learningRate = parseFloat(document.getElementById('learning-rate').value);
     
-    // Create trainer
+    // Create trainer with global instances
     trainer = new MiniLLMTrainer(window.model, window.tokenizer);
     trainer.optimizer = tf.train.adam(learningRate);
     
